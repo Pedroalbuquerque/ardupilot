@@ -215,7 +215,6 @@ bool AP_Arming::ins_checks(bool report)
                 // likely to be temperature-sensitive on MEMS accel sensors
                 // such as the MPU-6000.
                 vec_diff.z *= 0.5f;
-
                 if (vec_diff.length() <= threshold) {
                     last_accel_pass_ms[i] = AP_HAL::millis();
                 }
