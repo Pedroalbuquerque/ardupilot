@@ -133,6 +133,7 @@ void AP_Mission::reset()
     _do_cmd.index          = AP_MISSION_CMD_INDEX_NONE;
     _prev_nav_cmd_index    = AP_MISSION_CMD_INDEX_NONE;
     _prev_nav_cmd_wp_index = AP_MISSION_CMD_INDEX_NONE;
+    _prev_nav_cmd_id       = AP_MISSION_CMD_ID_NONE;
     init_jump_tracking();
 }
 
@@ -312,6 +313,7 @@ bool AP_Mission::set_current_cmd(uint16_t index)
 
     // if index is zero then the user wants to completely restart the mission
     if (index == 0 || _flags.state == MISSION_COMPLETE) {
+        _prev_nav_cmd_id    = AP_MISSION_CMD_ID_NONE;
         _prev_nav_cmd_index = AP_MISSION_CMD_INDEX_NONE;
         _prev_nav_cmd_wp_index = AP_MISSION_CMD_INDEX_NONE;
         // reset the jump tracking to zero
@@ -373,6 +375,7 @@ bool AP_Mission::set_current_cmd(uint16_t index)
         // check if navigation or "do" command
         if (is_nav_cmd(cmd)) {
             // save previous nav command index
+            _prev_nav_cmd_id = _nav_cmd.id;
             _prev_nav_cmd_index = _nav_cmd.index;
             // save separate previous nav command index if it contains lat,long,alt
             if (!(cmd.content.location.lat == 0 && cmd.content.location.lng == 0)) {
@@ -783,7 +786,7 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         }
     }
 
-    // if we got this far then it must have been succesful
+    // if we got this far then it must have been successful
     return MAV_MISSION_ACCEPTED;
 }
 
@@ -1245,6 +1248,7 @@ bool AP_Mission::advance_current_nav_cmd()
         // check if navigation or "do" command
         if (is_nav_cmd(cmd)) {
             // save previous nav command index
+            _prev_nav_cmd_id = _nav_cmd.id;
             _prev_nav_cmd_index = _nav_cmd.index;
             // save separate previous nav command index if it contains lat,long,alt
             if (!(cmd.content.location.lat == 0 && cmd.content.location.lng == 0)) {
@@ -1437,7 +1441,7 @@ void AP_Mission::init_jump_tracking()
 /// get_jump_times_run - returns number of times the jump command has been run
 int16_t AP_Mission::get_jump_times_run(const Mission_Command& cmd)
 {
-    // exit immediatley if cmd is not a do-jump command or target is invalid
+    // exit immediately if cmd is not a do-jump command or target is invalid
     if ((cmd.id != MAV_CMD_DO_JUMP) || (cmd.content.jump.target >= (unsigned)_cmd_total) || (cmd.content.jump.target == 0)) {
         // To-Do: log an error?
         return AP_MISSION_JUMP_TIMES_MAX;
