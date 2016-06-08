@@ -1,8 +1,8 @@
 /// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
-   Lead developer: Andrew Tridgell
+   Lead developer: Andrew Tridgell & Tom Pittenger
 
-   Authors:    Doug Weibel, Jose Julio, Jordi Munoz, Jason Short, Randy Mackay, Pat Hickey, John Arne Birkeland, Olivier Adler, Amilcar Lucas, Gregory Fletcher, Paul Riseborough, Brandon Jones, Jon Challinger, Tom Pittenger
+   Authors:    Doug Weibel, Jose Julio, Jordi Munoz, Jason Short, Randy Mackay, Pat Hickey, John Arne Birkeland, Olivier Adler, Amilcar Lucas, Gregory Fletcher, Paul Riseborough, Brandon Jones, Jon Challinger
    Thanks to:  Chris Anderson, Michael Oborne, Paul Mather, Bill Premerlani, James Cohen, JB from rotorFX, Automatik, Fefenin, Peter Meister, Remzibi, Yury Smirnov, Sandro Benigno, Max Levine, Roberto Navoni, Lorenz Meier, Yury MonZon
 
    Please contribute your ideas! See http://dev.ardupilot.com for details
@@ -56,7 +56,6 @@
 #include <APM_OBC/APM_OBC.h>
 #include <APM_Control/APM_Control.h>
 #include <APM_Control/AP_AutoTune.h>
-#include <GCS_MAVLink/GCS.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>    // MAVLink GCS definitions
 #include <AP_SerialManager/AP_SerialManager.h>   // Serial manager library
 #include <AP_Mount/AP_Mount.h>           // Camera/Antenna mount
@@ -90,6 +89,7 @@
 #include <AP_Parachute/AP_Parachute.h>
 #include <AP_ADSB/AP_ADSB.h>
 
+#include "GCS_Mavlink.h"
 #include "quadplane.h"
 #include "tuning.h"
 
@@ -129,7 +129,7 @@ protected:
  */
 class Plane : public AP_HAL::HAL::Callbacks {
 public:
-    friend class GCS_MAVLINK;
+    friend class GCS_MAVLINK_Plane;
     friend class Parameters;
     friend class AP_Arming_Plane;
     friend class QuadPlane;
@@ -198,6 +198,7 @@ private:
         float initial_range;
         float correction;
         float initial_correction;
+        float last_stable_correction;
         uint32_t last_correction_time_ms;
         uint8_t in_range_count;
         float height_estimate;
@@ -253,7 +254,7 @@ private:
     // GCS selection
     AP_SerialManager serial_manager;
     const uint8_t num_gcs = MAVLINK_COMM_NUM_BUFFERS;
-    GCS_MAVLINK gcs[MAVLINK_COMM_NUM_BUFFERS];
+    GCS_MAVLINK_Plane gcs[MAVLINK_COMM_NUM_BUFFERS];
 
     // selected navigation controller
     AP_Navigation *nav_controller = &L1_controller;
@@ -438,6 +439,9 @@ private:
         // Flag to indicate if we have triggered pre-flare. This occurs when we have reached LAND_PF_ALT
         bool land_pre_flare:1;
 
+        // are we in auto and flight mode is approach || pre-flare || final (flare)
+        bool land_in_progress:1;
+
         // should we fly inverted?
         bool inverted_flight:1;
 
@@ -505,6 +509,12 @@ private:
 
         // time stamp of when we start flying while in auto mode in milliseconds
         uint32_t started_flying_in_auto_ms;
+
+        // calculated approach slope during auto-landing: ((prev_WP_loc.alt - next_WP_loc.alt)*0.01f - aparm.land_flare_sec * sink_rate) / get_distance(prev_WP_loc, next_WP_loc)
+        float land_slope;
+
+        // same as land_slope but sampled once before a rangefinder changes the slope. This should be the original mission planned slope
+        float initial_land_slope;
 
         // barometric altitude at start of takeoff
         float baro_takeoff_alt;
@@ -816,7 +826,7 @@ private:
     int32_t get_RTL_altitude();
     float relative_altitude(void);
     int32_t relative_altitude_abs_cm(void);
-    float relative_ground_altitude(void);
+    float relative_ground_altitude(bool use_rangefinder_if_available);
     void set_target_altitude_current(void);
     void set_target_altitude_current_adjusted(void);
     void set_target_altitude_location(const Location &loc);
@@ -889,6 +899,7 @@ private:
     bool verify_land();
     void disarm_if_autoland_complete();
     void setup_landing_glide_slope(void);
+    void adjust_landing_slope_for_rangefinder_bump(void);
     bool jump_to_landing_sequence(void);
     float tecs_hgt_afe(void);
     void set_nav_controller(void);
@@ -914,7 +925,7 @@ private:
     void trim_control_surfaces();
     void trim_radio();
     bool rc_failsafe_active(void);
-    void init_barometer(void);
+    void init_barometer(bool full_calibration);
     void init_rangefinder(void);
     void read_rangefinder(void);
     void read_airspeed(void);

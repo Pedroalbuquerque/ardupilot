@@ -37,6 +37,7 @@ void Plane::adjust_altitude_target()
     } else if (flight_stage == AP_SpdHgtControl::FLIGHT_LAND_APPROACH ||
             flight_stage == AP_SpdHgtControl::FLIGHT_LAND_PREFLARE) {
         setup_landing_glide_slope();
+        adjust_landing_slope_for_rangefinder_bump();
     } else if (reached_loiter_target()) {
         // once we reach a loiter target then lock to the final
         // altitude target
@@ -136,8 +137,12 @@ int32_t Plane::relative_altitude_abs_cm(void)
   return relative altitude in meters (relative to terrain, if available,
   or home otherwise)
  */
-float Plane::relative_ground_altitude(void)
+float Plane::relative_ground_altitude(bool use_rangefinder_if_available)
 {
+    if (use_rangefinder_if_available && rangefinder_state.in_range) {
+        return rangefinder_state.height_estimate;
+    }
+
 #if AP_TERRAIN_AVAILABLE
     float altitude;
     if (terrain.status() == AP_Terrain::TerrainStatusOK && terrain.height_above_terrain(altitude, true)) {
@@ -625,9 +630,11 @@ void Plane::rangefinder_height_update(void)
 
         // remember the last correction. Use a low pass filter unless
         // the old data is more than 5 seconds old
-        if (millis() - rangefinder_state.last_correction_time_ms > 5000) {
+        uint32_t now = millis();
+        if (now - rangefinder_state.last_correction_time_ms > 5000) {
             rangefinder_state.correction = correction;
             rangefinder_state.initial_correction = correction;
+            auto_state.initial_land_slope = auto_state.land_slope;
         } else {
             rangefinder_state.correction = 0.8f*rangefinder_state.correction + 0.2f*correction;
             if (fabsf(rangefinder_state.correction - rangefinder_state.initial_correction) > 30) {
@@ -638,7 +645,7 @@ void Plane::rangefinder_height_update(void)
                 memset(&rangefinder_state, 0, sizeof(rangefinder_state));
             }
         }
-        rangefinder_state.last_correction_time_ms = millis();    
+        rangefinder_state.last_correction_time_ms = now;
     }
 }
 #endif

@@ -211,9 +211,7 @@ bool AP_Arming::ins_checks(bool report)
                     threshold *= 3;
                 }
 
-                // EKF is less sensitive to Z-axis error and Z-axis is more
-                // likely to be temperature-sensitive on MEMS accel sensors
-                // such as the MPU-6000.
+                // EKF is less sensitive to Z-axis error
                 vec_diff.z *= 0.5f;
                 if (vec_diff.length() <= threshold) {
                     last_accel_pass_ms[i] = AP_HAL::millis();
@@ -369,7 +367,7 @@ bool AP_Arming::battery_checks(bool report)
             return false;
         }
 
-        for (int i = 0; i < AP_BATT_MONITOR_MAX_INSTANCES; i++) {
+        for (int i = 0; i < _battery.num_instances(); i++) {
             if ((_min_voltage[i] > 0.0f) && (_battery.voltage(i) < _min_voltage[i])) {
                 if (report) {
                     GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_CRITICAL, "PreArm: Battery %d voltage %.1f below minimum %.1f",

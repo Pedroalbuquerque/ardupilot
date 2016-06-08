@@ -17,7 +17,7 @@ extern const AP_HAL::HAL& hal;
 // Check basic filter health metrics and return a consolidated health status
 bool NavEKF2_core::healthy(void) const
 {
-    uint8_t faultInt;
+    uint16_t faultInt;
     getFilterFaults(faultInt);
     if (faultInt > 0) {
         return false;
@@ -350,7 +350,7 @@ void NavEKF2_core::getMagXYZ(Vector3f &magXYZ) const
 bool NavEKF2_core::getMagOffsets(uint8_t mag_idx, Vector3f &magOffsets) const
 {
     // compass offsets are valid if we have finalised magnetic field initialisation and magnetic field learning is not prohibited and primary compass is valid
-    if (mag_idx == magSelectIndex && firstMagYawInit && (frontend->_magCal != 2) && _ahrs->get_compass()->healthy(magSelectIndex)) {
+    if (mag_idx == magSelectIndex && firstInflightMagInit && (effective_magCal() != 2) && _ahrs->get_compass()->healthy(magSelectIndex)) {
         magOffsets = _ahrs->get_compass()->get_offsets(magSelectIndex) - stateStruct.body_magfield*1000.0f;
         return true;
     } else {
@@ -409,7 +409,7 @@ return the filter fault status as a bitmasked integer
  7 = badly conditioned synthetic sideslip fusion
  7 = filter is not initialised
 */
-void  NavEKF2_core::getFilterFaults(uint8_t &faults) const
+void  NavEKF2_core::getFilterFaults(uint16_t &faults) const
 {
     faults = (stateStruct.quat.is_nan()<<0 |
               stateStruct.velocity.is_nan()<<1 |
@@ -459,8 +459,8 @@ void  NavEKF2_core::getFilterStatus(nav_filter_status &status) const
     bool someVertRefData = (!velTimeout && useGpsVertVel) || !hgtTimeout;
     bool someHorizRefData = !(velTimeout && posTimeout && tasTimeout) || doingFlowNav;
     bool optFlowNavPossible = flowDataValid && (frontend->_fusionModeGPS == 3);
-    bool gpsNavPossible = !gpsNotAvailable && (PV_AidingMode == AID_ABSOLUTE) && gpsGoodToAlign;
-    bool filterHealthy = healthy() && tiltAlignComplete && yawAlignComplete;
+    bool gpsNavPossible = !gpsNotAvailable && gpsGoodToAlign;
+    bool filterHealthy = healthy() && tiltAlignComplete && (yawAlignComplete || (!use_compass() && (PV_AidingMode == AID_NONE)));
     // If GPS height usage is specified, height is considered to be inaccurate until the GPS passes all checks
     bool hgtNotAccurate = (frontend->_altSource == 2) && !validOrigin;
 
@@ -478,8 +478,8 @@ void  NavEKF2_core::getFilterStatus(nav_filter_status &status) const
     status.flags.takeoff_detected = takeOffDetected; // takeoff for optical flow navigation has been detected
     status.flags.takeoff = expectGndEffectTakeoff; // The EKF has been told to expect takeoff and is in a ground effect mitigation mode
     status.flags.touchdown = expectGndEffectTouchdown; // The EKF has been told to detect touchdown and is in a ground effect mitigation mode
-    status.flags.using_gps = (imuSampleTime_ms - lastPosPassTime_ms) < 4000;
-    status.flags.gps_glitching = !gpsAccuracyGood; // The GPS is glitching
+    status.flags.using_gps = ((imuSampleTime_ms - lastPosPassTime_ms) < 4000) && (PV_AidingMode == AID_ABSOLUTE);
+    status.flags.gps_glitching = !gpsAccuracyGood && (PV_AidingMode == AID_ABSOLUTE); // The GPS is glitching
 }
 
 /*
