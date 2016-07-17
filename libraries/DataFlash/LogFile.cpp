@@ -1268,10 +1268,10 @@ void DataFlash_Class::Log_Write_EKF(AP_AHRS_NavEKF &ahrs, bool optFlowEnabled)
                 HAGL : (int16_t)(100*HAGL),
                 offset : (int16_t)(100*gndOffset),
                 RI : (int16_t)(100*rngInnov),
-                  meaRng : (uint16_t)(100*range),
-                  errHAGL : (uint16_t)(100*gndOffsetErr)
-               };
-              WriteBlock(&pkt5, sizeof(pkt5));
+                meaRng : (uint16_t)(100*range),
+                errHAGL : (uint16_t)(100*gndOffsetErr),
+            };
+            WriteBlock(&pkt5, sizeof(pkt5));
         }
     }
     // only log EKF2 if enabled
@@ -1411,31 +1411,34 @@ void DataFlash_Class::Log_Write_EKF2(AP_AHRS_NavEKF &ahrs, bool optFlowEnabled)
     WriteBlock(&pkt4, sizeof(pkt4));
 
     // Write fifth EKF packet - take data from the primary instance
-    if (optFlowEnabled) {
-        float normInnov=0; // normalised innovation variance ratio for optical flow observations fused by the main nav filter
-        float gndOffset=0; // estimated vertical position of the terrain relative to the nav filter zero datum
-        float flowInnovX=0, flowInnovY=0; // optical flow LOS rate vector innovations from the main nav filter
-        float auxFlowInnov=0; // optical flow LOS rate innovation from terrain offset estimator
-        float HAGL=0; // height above ground level
-        float rngInnov=0; // range finder innovations
-        float range=0; // measured range
-        float gndOffsetErr=0; // filter ground offset state error
-        ahrs.get_NavEKF2().getFlowDebug(-1,normInnov, gndOffset, flowInnovX, flowInnovY, auxFlowInnov, HAGL, rngInnov, range, gndOffsetErr);
-        struct log_EKF5 pkt5 = {
-            LOG_PACKET_HEADER_INIT(LOG_NKF5_MSG),
-            time_us : time_us,
-            normInnov : (uint8_t)(MIN(100*normInnov,255)),
-            FIX : (int16_t)(1000*flowInnovX),
-            FIY : (int16_t)(1000*flowInnovY),
-            AFI : (int16_t)(1000*auxFlowInnov),
-            HAGL : (int16_t)(100*HAGL),
-            offset : (int16_t)(100*gndOffset),
-            RI : (int16_t)(100*rngInnov),
-            meaRng : (uint16_t)(100*range),
-            errHAGL : (uint16_t)(100*gndOffsetErr)
-         };
-        WriteBlock(&pkt5, sizeof(pkt5));
-    }
+    float normInnov=0; // normalised innovation variance ratio for optical flow observations fused by the main nav filter
+    float gndOffset=0; // estimated vertical position of the terrain relative to the nav filter zero datum
+    float flowInnovX=0, flowInnovY=0; // optical flow LOS rate vector innovations from the main nav filter
+    float auxFlowInnov=0; // optical flow LOS rate innovation from terrain offset estimator
+    float HAGL=0; // height above ground level
+    float rngInnov=0; // range finder innovations
+    float range=0; // measured range
+    float gndOffsetErr=0; // filter ground offset state error
+    Vector3f predictorErrors; // output predictor angle, velocity and position tracking error
+    ahrs.get_NavEKF2().getFlowDebug(-1,normInnov, gndOffset, flowInnovX, flowInnovY, auxFlowInnov, HAGL, rngInnov, range, gndOffsetErr);
+    ahrs.get_NavEKF2().getOutputTrackingError(-1,predictorErrors);
+    struct log_NKF5 pkt5 = {
+        LOG_PACKET_HEADER_INIT(LOG_NKF5_MSG),
+        time_us : time_us,
+        normInnov : (uint8_t)(MIN(100*normInnov,255)),
+        FIX : (int16_t)(1000*flowInnovX),
+        FIY : (int16_t)(1000*flowInnovY),
+        AFI : (int16_t)(1000*auxFlowInnov),
+        HAGL : (int16_t)(100*HAGL),
+        offset : (int16_t)(100*gndOffset),
+        RI : (int16_t)(100*rngInnov),
+        meaRng : (uint16_t)(100*range),
+        errHAGL : (uint16_t)(100*gndOffsetErr),
+        angErr : (float)predictorErrors.x,
+        velErr : (float)predictorErrors.y,
+        posErr : (float)predictorErrors.z
+     };
+    WriteBlock(&pkt5, sizeof(pkt5));
 
     // log innovations for the second IMU if enabled
     if (ahrs.get_NavEKF2().activeCores() >= 2) {
@@ -1862,18 +1865,38 @@ void DataFlash_Class::Log_Write_Rate(const AP_AHRS &ahrs,
     struct log_Rate pkt_rate = {
         LOG_PACKET_HEADER_INIT(LOG_RATE_MSG),
         time_us         : AP_HAL::micros64(),
-        control_roll    : (float)rate_targets.x,
-        roll            : (float)(ahrs.get_gyro().x * AC_ATTITUDE_CONTROL_DEGX100),
+        control_roll    : degrees(rate_targets.x),
+        roll            : degrees(ahrs.get_gyro().x),
         roll_out        : motors.get_roll(),
-        control_pitch   : (float)rate_targets.y,
-        pitch           : (float)(ahrs.get_gyro().y * AC_ATTITUDE_CONTROL_DEGX100),
+        control_pitch   : degrees(rate_targets.y),
+        pitch           : degrees(ahrs.get_gyro().y),
         pitch_out       : motors.get_pitch(),
-        control_yaw     : (float)rate_targets.z,
-        yaw             : (float)(ahrs.get_gyro().z * AC_ATTITUDE_CONTROL_DEGX100),
+        control_yaw     : degrees(rate_targets.z),
+        yaw             : degrees(ahrs.get_gyro().z),
         yaw_out         : motors.get_yaw(),
         control_accel   : (float)accel_target.z,
         accel           : (float)(-(ahrs.get_accel_ef_blended().z + GRAVITY_MSS) * 100.0f),
         accel_out       : motors.get_throttle()
     };
     WriteBlock(&pkt_rate, sizeof(pkt_rate));
+}
+
+// Write rally points
+void DataFlash_Class::Log_Write_Rally(const AP_Rally &rally)
+{
+    RallyLocation rally_point;
+    for (uint8_t i=0; i<rally.get_rally_total(); i++) {
+        if (rally.get_rally_point_with_index(i, rally_point)) {
+            struct log_Rally pkt_rally = {
+                LOG_PACKET_HEADER_INIT(LOG_RALLY_MSG),
+                time_us         : AP_HAL::micros64(),
+                total           : rally.get_rally_total(),
+                sequence        : i,
+                latitude        : rally_point.lat,
+                longitude       : rally_point.lng,
+                altitude        : rally_point.alt
+            };
+            WriteBlock(&pkt_rally, sizeof(pkt_rally));
+        }
+    }
 }

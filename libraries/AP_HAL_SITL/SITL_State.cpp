@@ -63,6 +63,8 @@ void SITL_State::_set_param_default(const char *parm)
  */
 void SITL_State::_sitl_setup(const char *home_str)
 {
+    _home_str = home_str;
+
 #ifndef __CYGWIN__
     _parent_pid = getppid();
 #endif
@@ -95,9 +97,6 @@ void SITL_State::_sitl_setup(const char *home_str)
 #endif
         if (enable_gimbal) {
             gimbal = new SITL::Gimbal(_sitl->state);
-        }
-        if (enable_ADSB) {
-            adsb = new SITL::ADSB(_sitl->state, home_str);
         }
 
         fg_socket.connect("127.0.0.1", 5503);
@@ -172,6 +171,15 @@ void SITL_State::_fdm_input_step(void)
         _update_barometer(_sitl->state.altitude);
         _update_compass(_sitl->state.rollDeg, _sitl->state.pitchDeg, _sitl->state.yawDeg);
         _update_flow();
+
+        if (_sitl->adsb_plane_count >= 0 &&
+            adsb == nullptr) {
+            adsb = new SITL::ADSB(_sitl->state, _home_str);
+        } else if (_sitl->adsb_plane_count == -1 &&
+                   adsb != nullptr) {
+            delete adsb;
+            adsb = nullptr;
+        }
     }
 
     // trigger all APM timers.
@@ -367,15 +375,23 @@ void SITL_State::_simulator_servos(SITL::Aircraft::sitl_input &input)
 
     // pass wind into simulators, using a wind gradient below 60m
     float altitude = _barometer?_barometer->get_altitude():0;
-    float wind_speed = _sitl?_sitl->wind_speed:0;
+    float wind_speed = 0;
+    float wind_direction = 0;
+    if (_sitl) {
+        // The EKF does not like step inputs so this LPF keeps it happy.
+        wind_speed = _sitl->wind_speed_active = (0.95f*_sitl->wind_speed_active) + (0.05f*_sitl->wind_speed);
+        wind_direction = _sitl->wind_direction_active = (0.95f*_sitl->wind_direction_active) + (0.05f*_sitl->wind_direction);
+    }
+
     if (altitude < 0) {
         altitude = 0;
     }
     if (altitude < 60) {
         wind_speed *= sqrtf(MAX(altitude / 60, 0));
     }
+
     input.wind.speed = wind_speed;
-    input.wind.direction = _sitl?_sitl->wind_direction:0;
+    input.wind.direction = wind_direction;
     input.wind.turbulence = _sitl?_sitl->wind_turbulance:0;
 
     for (i=0; i<SITL_NUM_CHANNELS; i++) {

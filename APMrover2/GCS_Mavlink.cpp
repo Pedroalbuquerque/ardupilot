@@ -596,6 +596,7 @@ bool GCS_MAVLINK_Rover::try_send_message(enum ap_message id)
         break;
 
     case MSG_RETRY_DEFERRED:
+    case MSG_ADSB_VEHICLE:
     case MSG_TERRAIN:
     case MSG_OPTICAL_FLOW:
     case MSG_GIMBAL_REPORT:
@@ -1259,6 +1260,12 @@ void GCS_MAVLINK_Rover::handleMessage(mavlink_message_t* msg)
 			if(msg->sysid != rover.g.sysid_my_gcs) break;
             rover.last_heartbeat_ms = rover.failsafe.rc_override_timer = AP_HAL::millis();
             rover.failsafe_trigger(FAILSAFE_EVENT_GCS, false);
+            break;
+        }
+
+    case MAVLINK_MSG_ID_GPS_INPUT:
+        {
+            rover.gps.handle_msg(msg);
             break;
         }
 

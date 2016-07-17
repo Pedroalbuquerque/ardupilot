@@ -354,6 +354,23 @@ struct PACKED log_EKF5 {
     uint16_t errHAGL;
 };
 
+struct PACKED log_NKF5 {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t normInnov;
+    int16_t FIX;
+    int16_t FIY;
+    int16_t AFI;
+    int16_t HAGL;
+    int16_t offset;
+    int16_t RI;
+    uint16_t meaRng;
+    uint16_t errHAGL;
+    float angErr;
+    float velErr;
+    float posErr;
+};
+
 struct PACKED log_Cmd {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -686,6 +703,16 @@ struct PACKED log_SbpRAW2 {
     uint8_t data2[192];
 };
 
+struct PACKED log_Rally {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t total;
+    uint8_t sequence;
+    int32_t latitude;
+    int32_t longitude;
+    int16_t altitude;
+};
+
 // #endif // SBP_HW_LOGGING
 
 /*
@@ -785,7 +812,7 @@ Format characters in the format string for binary log messages
     { LOG_EKF4_MSG, sizeof(log_EKF4), \
       "EKF4","QcccccccbbHBHH","TimeUS,SV,SP,SH,SMX,SMY,SMZ,SVT,OFN,OFE,FS,TS,SS,GPS" }, \
     { LOG_EKF5_MSG, sizeof(log_EKF5), \
-      "EKF5","QBhhhcccCC","TimeUS,normInnov,FIX,FIY,AFI,HAGL,offset,RI,meaRng,errHAGL" }, \
+      "EKF5","QBhhhcccCCfff","TimeUS,NI,FIX,FIY,AFI,HAGL,offset,RI,rng,Herr" }, \
     { LOG_NKF1_MSG, sizeof(log_EKF1), \
       "NKF1","QccCfffffffccc","TimeUS,Roll,Pitch,Yaw,VN,VE,VD,dPD,PN,PE,PD,GX,GY,GZ" }, \
     { LOG_NKF2_MSG, sizeof(log_NKF2), \
@@ -794,8 +821,8 @@ Format characters in the format string for binary log messages
       "NKF3","Qcccccchhhcc","TimeUS,IVN,IVE,IVD,IPN,IPE,IPD,IMX,IMY,IMZ,IYAW,IVT" }, \
     { LOG_NKF4_MSG, sizeof(log_NKF4), \
       "NKF4","QcccccfbbHBHHb","TimeUS,SV,SP,SH,SM,SVT,errRP,OFN,OFE,FS,TS,SS,GPS,PI" }, \
-    { LOG_NKF5_MSG, sizeof(log_EKF5), \
-      "NKF5","QBhhhcccCC","TimeUS,normInnov,FIX,FIY,AFI,HAGL,offset,RI,meaRng,errHAGL" }, \
+    { LOG_NKF5_MSG, sizeof(log_NKF5), \
+      "NKF5","QBhhhcccCCfff","TimeUS,NI,FIX,FIY,AFI,HAGL,offset,RI,rng,Herr,eAng,eVel,ePos" }, \
     { LOG_NKF6_MSG, sizeof(log_EKF1), \
       "NKF6","QccCfffffffccc","TimeUS,Roll,Pitch,Yaw,VN,VE,VD,dPD,PN,PE,PD,GX,GY,GZ" }, \
     { LOG_NKF7_MSG, sizeof(log_NKF2), \
@@ -821,7 +848,7 @@ Format characters in the format string for binary log messages
     { LOG_GPS_RAWS_MSG, sizeof(log_GPS_RAWS), \
       "GRXS", "QddfBBBHBBBBB", "TimeUS,prMes,cpMes,doMes,gnss,sv,freq,lock,cno,prD,cpD,doD,trk" }, \
     { LOG_GPS_SBF_EVENT_MSG, sizeof(log_GPS_SBF_EVENT), \
-      "SBFE", "QIHBBdddfffff", "TimeUS,TOW,WN,Mode,Err,Lat,Long,Height,Undul,Vn,Ve,Vu,COG" }, \
+      "SBFE", "QIHBBdddfffff", "TimeUS,TOW,WN,Mode,Err,Lat,Lng,Height,Undul,Vn,Ve,Vu,COG" }, \
     { LOG_ESC1_MSG, sizeof(log_Esc), \
       "ESC1",  "Qcccc", "TimeUS,RPM,Volt,Curr,Temp" }, \
     { LOG_ESC2_MSG, sizeof(log_Esc), \
@@ -887,7 +914,9 @@ Format characters in the format string for binary log messages
     { LOG_GIMBAL3_MSG, sizeof(log_Gimbal3), \
       "GMB3", "Ihhh", "TimeMS,rl_torque_cmd,el_torque_cmd,az_torque_cmd" }, \
     { LOG_RATE_MSG, sizeof(log_Rate), \
-      "RATE", "Qffffffffffff",  "TimeUS,RDes,R,ROut,PDes,P,POut,YDes,Y,YOut,ADes,A,AOut" }
+      "RATE", "Qffffffffffff",  "TimeUS,RDes,R,ROut,PDes,P,POut,YDes,Y,YOut,ADes,A,AOut" }, \
+    { LOG_RALLY_MSG, sizeof(log_Rally), \
+      "RALY", "QBBLLh", "TimeUS,Tot,Seq,Lat,Lng,Alt" }
 
 // #if SBP_HW_LOGGING
 #define LOG_SBP_STRUCTURES \
@@ -1002,6 +1031,7 @@ enum LogMessages {
     LOG_GIMBAL2_MSG,
     LOG_GIMBAL3_MSG,
     LOG_RATE_MSG,
+    LOG_RALLY_MSG,
 };
 
 enum LogOriginType {

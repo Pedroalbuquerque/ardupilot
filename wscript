@@ -10,7 +10,9 @@ sys.path.insert(0, 'Tools/ardupilotwaf/')
 import ardupilotwaf
 import boards
 
-from waflib import Build, ConfigSet, Context, Utils
+from waflib import Build, ConfigSet, Configure, Context, Utils
+
+Configure.autoconfig = 'clobber'
 
 # TODO: implement a command 'waf help' that shows the basic tasks a
 # developer might want to do: e.g. how to configure a board, compile a
@@ -80,6 +82,40 @@ revisions.
         default=False,
         help='Configure as debug variant.')
 
+    g.add_option('--disable-lttng', action='store_true',
+        default=False,
+        help="Don't use lttng even if supported by board and dependencies available")
+
+    g.add_option('--disable-libiio', action='store_true',
+        default=False,
+        help="Don't use libiio even if supported by board and dependencies available")
+
+    g.add_option('--disable-tests', action='store_true',
+        default=False,
+        help="Disable compilation and test execution")
+
+    g.add_option('--static',
+        action='store_true',
+        default=False,
+        help='Force a static build')
+
+def _collect_autoconfig_files(cfg):
+    for m in sys.modules.values():
+        paths = []
+        if hasattr(m, '__file__'):
+            paths.append(m.__file__)
+        elif hasattr(m, '__path__'):
+            for p in m.__path__:
+                paths.append(p)
+
+        for p in paths:
+            if p in cfg.files or not os.path.isfile(p):
+                continue
+
+            with open(p, 'rb') as f:
+                cfg.hash = Utils.h_list((cfg.hash, f.read()))
+                cfg.files.append(p)
+
 def configure(cfg):
     cfg.env.BOARD = cfg.options.board
     cfg.env.DEBUG = cfg.options.debug
@@ -94,6 +130,10 @@ def configure(cfg):
 
     # Allow to differentiate our build from the make build
     cfg.define('WAF_BUILD', 1)
+
+    if cfg.options.static:
+        cfg.msg('Using static linking')
+        env.STATIC_LINKING = True
 
     cfg.msg('Setting board to', cfg.options.board)
     cfg.get_board().configure(cfg)
@@ -139,6 +179,8 @@ def configure(cfg):
     cfg.define('_GNU_SOURCE', 1)
 
     cfg.write_config_header(os.path.join(cfg.variant, 'ap_config.h'))
+
+    _collect_autoconfig_files(cfg)
 
 def collect_dirs_to_recurse(bld, globs, **kw):
     dirs = []
@@ -197,7 +239,8 @@ def _build_common_taskgens(bld):
         use='mavlink',
     )
 
-    bld.libgtest()
+    if bld.env.HAS_GTEST:
+        bld.libgtest(cxxflags=['-include', 'ap_config.h'])
 
     if bld.env.HAS_GBENCHMARK:
         bld.libbenchmark()

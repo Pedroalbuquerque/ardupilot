@@ -23,6 +23,7 @@
 #include "AP_AHRS.h"
 #include <AP_Vehicle/AP_Vehicle.h>
 #include <GCS_MAVLink/GCS.h>
+#include <AP_Module/AP_Module.h>
 
 #if AP_AHRS_NAVEKF_AVAILABLE
 
@@ -91,6 +92,9 @@ void AP_AHRS_NavEKF::update(void)
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     update_SITL();
 #endif
+
+    // call AHRS_update hook if any
+    AP_Module::call_hook_AHRS_update(*this);
 }
 
 void AP_AHRS_NavEKF::update_DCM(void)
@@ -1117,6 +1121,13 @@ void AP_AHRS_NavEKF::send_ekf_status_report(mavlink_channel_t chan)
         return EKF1.send_status_report(chan);
 #endif
 
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    case EKF_TYPE_SITL:
+        // send zero status report
+        mavlink_msg_ekf_status_report_send(chan, 0, 0, 0, 0, 0, 0);
+        break;
+#endif
+        
     case EKF_TYPE2:
     default:
         return EKF2.send_status_report(chan);

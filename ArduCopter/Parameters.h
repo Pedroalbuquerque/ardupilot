@@ -54,6 +54,7 @@ public:
         k_param_ins,                            // libraries/AP_InertialSensor variables
         k_param_NavEKF2_old, // deprecated
         k_param_NavEKF2,
+        k_param_g2, // 2nd block of parameters
 
         // simulation
         k_param_sitl = 10,
@@ -181,6 +182,7 @@ public:
         k_param_fs_crash_check,
         k_param_throw_motor_start,
         k_param_terrain_follow,    // 94
+        k_param_avoid,
 
         // 97: RSSI
         k_param_rssi = 97,
@@ -280,7 +282,7 @@ public:
         k_param_rc_8,
         k_param_rc_10,
         k_param_rc_11,
-        k_param_throttle_min,
+        k_param_throttle_min,           // remove
         k_param_throttle_max,           // remove
         k_param_failsafe_throttle,
         k_param_throttle_fs_action,     // remove
@@ -292,7 +294,7 @@ public:
         k_param_radio_tuning_low,
         k_param_rc_speed = 192,
         k_param_failsafe_battery_enabled,
-        k_param_throttle_mid,
+        k_param_throttle_mid,           // remove
         k_param_failsafe_gps_enabled,   // remove
         k_param_rc_9,
         k_param_rc_12,
@@ -414,10 +416,8 @@ public:
 
     // Throttle
     //
-    AP_Int16        throttle_min;
     AP_Int8         failsafe_throttle;
     AP_Int16        failsafe_throttle_value;
-    AP_Int16        throttle_mid;
     AP_Int16        throttle_deadzone;
 
     // Flight modes
@@ -529,6 +529,20 @@ public:
         p_alt_hold              (ALT_HOLD_P)
     {
     }
+};
+
+/*
+  2nd block of parameters, to avoid going past 256 top level keys
+ */
+class ParametersG2 {
+public:
+    ParametersG2(void) { AP_Param::setup_object_defaults(this, var_info); }
+
+    // var_info for holding Parameter information
+    static const struct AP_Param::GroupInfo var_info[];
+
+    // altitude at which nav control can start in takeoff
+    AP_Float takeoff_nav_alt;
 };
 
 extern const AP_Param::Info        var_info[];
